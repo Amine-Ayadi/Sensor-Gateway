@@ -1,0 +1,83 @@
+[SUCCESS] 
+Parent process (pid = 2129) is started 
+BUFFER INITIALIZED 
+[1 - CONNMGR THREAD] Gateway is ON: Accepting connections
+
+(Thread 140104872232512)
+[2 - DATAMGR THREAD] SENSOR MAP INSERTED(Thread 140104863778368)
+EP EVENT [0] = 1 ###############################
+(Thread 140104872232512)
+after safe malloc  0x7f6cb0000c90
+(Thread 140104872232512)
+NEW CLIENT 0x7f6cb0000c60
+(Thread 140104872232512)
+NEW EPOLL DATA 0x7f6cb0000c90
+(Thread 140104872232512)
+[1 - CONNMGR THREAD] Number of connections is: 1
+(Thread 140104872232512)
+EP EVENT [0] = 1 ###############################
+(Thread 140104872232512)
+
+[1 - CONNMGR THREAD] buffer size is 1(Thread 140104872232512)
+[2 - DATAMGR THREAD] buffer has 21 (Thread 140104863778368)
+DATA RETRIEVED IS 21 
+Room ID : 2 (Thread 140104863778368)
+Sensor ID : 21 (Thread 140104863778368)
+Last modified is at : [04:34:26]:  (Thread 140104863778368)
+	Value_recoded : 0.00 (Thread 140104863778368)
+	Value_recoded : 0.00 (Thread 140104863778368)
+	Value_recoded : 0.00 (Thread 140104863778368)
+	Value_recoded : 0.00 (Thread 140104863778368)
+	Value_recoded : 19.98 (Thread 140104863778368)
+Running Average : 4.00 (Thread 140104863778368)
+[2 - DatamgrID]: BUFFER SIZE NOW IS 1
+(Thread 140104863778368)
+
+	[LOG][2 - DATAMGR THREAD] Temperature dropped in room 14. 
+	The average temperature recorded by sensor 142 is 0.00 at 0
+
+(Thread 140104863778368)
+EP EVENT [0] = 1 ###############################
+(Thread 140104872232512)
+
+[1 - CONNMGR THREAD] buffer size is 1(Thread 140104872232512)
+[2 - DATAMGR THREAD] buffer has 21 (Thread 140104863778368)
+DATA RETRIEVED IS 21 
+Room ID : 2 (Thread 140104863778368)
+Sensor ID : 21 (Thread 140104863778368)
+Last modified is at : [04:34:28]:  (Thread 140104863778368)
+	Value_recoded : 0.00 (Thread 140104863778368)
+	Value_recoded : 0.00 (Thread 140104863778368)
+	Value_recoded : 0.00 (Thread 140104863778368)
+	Value_recoded : 19.98 (Thread 140104863778368)
+	Value_recoded : 19.85 (Thread 140104863778368)
+Running Average : 7.97 (Thread 140104863778368)
+[2 - DatamgrID]: BUFFER SIZE NOW IS 1
+(Thread 140104863778368)
+
+	[LOG][2 - DATAMGR THREAD] Temperature dropped in room 14. 
+	The average temperature recorded by sensor 142 is 0.00 at 0
+
+(Thread 140104863778368)
+EP EVENT [0] = 1 ###############################
+(Thread 140104872232512)
+
+[1 - CONNMGR THREAD] buffer size is 1(Thread 140104872232512)
+[2 - DATAMGR THREAD] buffer has 21 (Thread 140104863778368)
+DATA RETRIEVED IS 21 
+Room ID : 2 (Thread 140104863778368)
+Sensor ID : 21 (Thread 140104863778368)
+Last modified is at : [04:34:30]:  (Thread 140104863778368)
+	Value_recoded : 0.00 (Thread 140104863778368)
+	Value_recoded : 0.00 (Thread 140104863778368)
+	Value_recoded : 19.98 (Thread 140104863778368)
+	Value_recoded : 19.85 (Thread 140104863778368)
+	Value_recoded : 20.06 (Thread 140104863778368)
+Running Average : 11.98 (Thread 140104863778368)
+[2 - DatamgrID]: BUFFER SIZE NOW IS 1
+(Thread 140104863778368)
+
+	[LOG][2 - DATAMGR THREAD] Temperature dropped in room 14. 
+	The average temperature recorded by sensor 142 is 0.00 at 0
+
+(Thread 140104863778368)
