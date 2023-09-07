@@ -141,9 +141,7 @@ void *connmgr_listen(void *argconn)
     }
     int listener = epoll_server->epoll_data->fd;
     struct epoll_event ev, ep_event[max_events];
-    //ev.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET | EPOLLOUT | EPOLLMSG | EPOLLWAKEUP | EPOLLRDHUP;
-    ev.events =EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET | EPOLLRDHUP;
-    //ev.events = EPOLLIN | EPOLLET;
+    ev.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET | EPOLLRDHUP;
     ev.data.fd = epoll_server->epoll_data->fd;
     if (epoll_ctl(efd, EPOLL_CTL_ADD, listener, &ev) == -1) {
         perror("epoll_ctl_1");
@@ -152,32 +150,22 @@ void *connmgr_listen(void *argconn)
     int nfds = 0;
 
     /****************** [LOG PROCESS] *****************/
-    log_msg("[1 - CONNMGR THREAD] Gateway is ON: Accepting connections\n\n");
-    //log_event("[1 - CONNMGR THREAD] Server started listening for new sockets\n");
-    
+    log_msg("[1-CONNMGR] Gateway is ON: Accepting connections\n\n");
+    log_event("[1-CONNMGR] Server started (waiting for upcoming sockets)\n");
     
     while(GW_ON)
     {
-        // wait for cond var thread consumer 2 -> producer
-        //TODO:
-        // while(buffer->head){
-        //     log_msg("[1 - CONNMGR THREAD] Thread[%d] %lu waiting on condition variable\n", pthread_self());
-        //     pthread_cond_wait(&buffer->buffer_no_data, &buffer->sbuffer_mutex);
-        // }
         int num_connections = dpl_size(list_connections);
+
         // readfds if ready for reading
-        //ep_event;
         if ((nfds = epoll_wait(efd, ep_event, max_events, TIMEOUT)) == -1) {
             perror("epoll_wait_2");
             exit(EXIT_FAILURE);
         }
 
         // ready sockets, check readfds
-
-        //log_msg("NFDS ===== %d\n", nfds);
         for (int i = 0; i < nfds; i++) {
             if (ep_event[i].events == EPOLLIN) {
-                //log_msg("EP EVENT [%d] = %b ###############################\n", i, ep_event[i].events);
                 // server: new client requesting to connect
                 if (ep_event[i].data.fd == listener) {
  
@@ -193,13 +181,16 @@ void *connmgr_listen(void *argconn)
                         perror("epoll_ctl_server");
                         exit(EXIT_FAILURE);
                     }
-                    /*TODO:*****LOG********/  
-                    log_msg("[1 - CONNMGR THREAD] Number of connections is: %d\n", num_connections);
+                    /******LOG********/  
+                    char message[200];
+                    sprintf(message, "[1-CONNMGR] A sensor node with %hd has opened a new connection\n", new_client->sensor_id);
+                    log_event(message);
+                    
+                    log_msg("[1-CONNMGR] Number of connections is: %d\n", num_connections);
                     if ((MAX_EVENTS-max_events) == 1) max_events++;//TODO:
                     continue;
-                }
-                // client: data from existing sensor, read
-                else {
+                } else {
+                    // client: data from existing sensor, read
                     my_epoll_data* client = ep_event[i].data.ptr;
                     sensor_data_t data; 
                     int bytes, result;
@@ -209,9 +200,15 @@ void *connmgr_listen(void *argconn)
                     result = tcp_receive(client->socket_id, (void *)&data.value, &bytes);
                     bytes = sizeof(data.ts);
                     result = tcp_receive(client->socket_id, (void *)&data.ts, &bytes);
+
                     client->last_modified = time(NULL);
-                    //log_msg("sensor id = %hd" PRIu16 " - temperature = %g - timestamp = %ld\n", data.id, data.value, (long int)data.ts);     
-                    
+
+                    char message[200];
+                    sprintf(message, "[1-CONNMGR] Receiving data from sensor id %hd\n", client->sensor_id);
+                    log_event(message);
+
+                    log_msg("sensor id = %hd" PRIu16 " - temperature = %g - timestamp = %ld\n", data.id, data.value, (long int)data.ts);     
+                    log_msg("results : %p ", &result);
                     pthread_mutex_lock(&buffer->sbuffer_mutex);
                     sbuffer_insert(buffer, &data);
                     log_msg("\n[1 - CONNMGR THREAD] buffer size is %d", buffer_size(buffer));
@@ -219,41 +216,77 @@ void *connmgr_listen(void *argconn)
                     pthread_mutex_unlock(&buffer->sbuffer_mutex);
                     continue;            
                 }
-            }  else if (ep_event[i].events & (EPOLLIN | EPOLLRDHUP))
-            {
+            }  else if (ep_event[i].events & (EPOLLIN | EPOLLRDHUP)) { // IF NOT EPOLLIN
+                
                 // ... (handle client failure)
                 log_msg("[1 - CONNMGR THREAD] Client failure..");
                 my_epoll_data* client = ep_event[i].data.ptr;
-                client = dpl_get_element_at_index(list_connections, i);
-                close_client_connection(client, list_connections, i);
+
+                int clientIndexToDisconnect = dpl_get_index_of_element(list_connections, client);
+                close_client_connection(client, list_connections, clientIndexToDisconnect);
                 epoll_server->last_modified = time(NULL);
 
-                char message[100];
-                sprintf(message, "[1 - CONNMGR THREAD] Client of sensor id %d has disconnected due to timeout", client->sensor_id);
-                // log_event(message);
+                char message[200];
+                sprintf(message, "[1-CONNMGR]  The sensor node with %hd has closed the connection\n", client->sensor_id);
+                log_event(message);
             }
         }
+
+        // try to handle client timeout
+        int clientIndexToBeDeleted = -1;
+        for (int i = 0; i < dpl_size(list_connections); ++i) {
+            // get any client, could be a server too
+            my_epoll_data* client = dpl_get_element_at_index(list_connections, i);
+
+            // check if it is a non null client
+            if (!client) continue;
+            if (client->epoll_data->fd == listener) continue;
+
+            if (client->last_modified + TIMEOUT < time(NULL)) {
+                clientIndexToBeDeleted = i;
+            }
+
+            if (clientIndexToBeDeleted != -1) break;
+        }
+        if (clientIndexToBeDeleted > -1) {
+            my_epoll_data* client = dpl_get_element_at_index(list_connections, clientIndexToBeDeleted);
+            close_client_connection(client, list_connections, clientIndexToBeDeleted);
+            log_msg("Client [%i] disconnected due to timeout\n", clientIndexToBeDeleted);
+            char message[200];
+            sprintf(message, "[1-CONNMGR] The sensor node with %hd has timed out\n", client->sensor_id);
+            log_event(message);
+        }
+
+
         // server: handle server timeouts
         if (epoll_server->last_modified + TIMEOUT < time(NULL) && dpl_size(list_connections) == 1)
         {
             log_msg("[1 - CONNMGR THREAD] No data to be received!! Gateway is shutting down \n");
-            if (tcp_close(&epoll_server->socket_id) != TCP_NO_ERROR){
+            if (tcp_close(&epoll_server->socket_id) == TCP_NO_ERROR){
                 // -------------[LOG PROCESS]-------------------
                 char message[100];
-                sprintf(message, "[1 - CONNMGR THREAD] Shutting down!!!\n");
-                //log_event(message);
+                sprintf(message, "[1-CONNMGR] Server shutting down (timeout)\n");
+                log_event(message);
                 // -------------[LOG PROCESS]-------------------
                 log_msg("[1 - CONNMGR THREAD] Test server is shutting down \n");
                 free(list_connections);
                 free(epoll_server->epoll_data);
                 free(epoll_server);
                 buffer->exit_flag = 1;
-                sbuffer_free(&buffer);
-                pthread_exit(NULL);
+                //sbuffer_free(&buffer);
+                log_msg("[1 - CONNMGR THREAD] Setting exit flag and waiting....\n");
+                pthread_cond_signal(&buffer->buffer_has_data1);
+                sleep(5);
+                //pthread_exit(NULL);
+                log_msg("[1 - CONNMGR THREAD] thread closed \n");
                 return NULL;
             } else {
-                perror("tcp_close");
+                log_msg("[1 - CONNMGR THREAD] Error closing thread \n");
+                buffer->exit_flag = 1;
                 exit(EXIT_FAILURE);
+                //perror("tcp_close");
+                pthread_exit(NULL);
+                return NULL;
             } 
         }
     }

@@ -23,7 +23,7 @@ void log_msg(const char* format, ...) {
     //printf("[%s]: ", ctime(&now));
     vprintf(format, args);
     va_end(args);
-    printf("(Thread %ld)\n", pthread_self());
+    printf("\n");
     fflush(stdout);
 }
 
@@ -127,8 +127,7 @@ int sbuffer_insert(sbuffer_t *buffer, sensor_data_t *data) {
     dummy = malloc(sizeof(sbuffer_node_t));
     if (dummy == NULL) return SBUFFER_FAILURE;
     dummy->data = *data;
-    dummy->managed = 0;
-    dummy->stored = 0;
+    dummy->consumed = 0;
     dummy->next = NULL;
     //pthread_rwlock_wrlock(locker);
     //pthread_mutex_lock(&buffer->mutex);
@@ -189,20 +188,19 @@ void log_event(const char* event_message)
     if (current_time == (time_t)-1) {
         perror("Error: time failed");
         exit(EXIT_FAILURE);
-    } else log_msg("[LOG] TIME SUCCESS\n");
+    } //else log_msg("[LOG] TIME SUCCESS\n");
     if (!current_time) {
         perror("Error: current time failed");
         exit(EXIT_FAILURE);
-    } else log_msg("[LOG] CURRENT TIME SUCCESS\n");
+    } //else log_msg("[LOG] CURRENT TIME SUCCESS\n");
     
     struct tm *time_info = localtime(&current_time);
 
     if (time_info == NULL) {
         perror("Error: localtime failed");
-        //exit(EXIT_FAILURE);
-    } else log_msg("[LOG] LOCALTIME SUCCESS\n");
+    } 
     
-    char time_str[50];
+    char time_str[100];
     if(strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", time_info) == 0) {
         log_msg("Error: strftime failed to format time\n");
         return;
@@ -212,20 +210,21 @@ void log_event(const char* event_message)
     if (fd < 0) {
         perror("Error opening FIFO for writing");
         exit(EXIT_FAILURE);
-    } else {
-        log_msg("[LOG] FIFO: WRITING\n");
-    } 
+    }
+
+    char message[300];
+    sprintf(message, "%s : %s", time_str, event_message);
+
+    write(fd, message, strlen(message));
     
     // Write the log event message to the FIFO
-    int ret = write(fd, time_str, strlen(time_str));
-    if(ret < 0) log_msg("************write failure*********** \n");
-    else log_msg("************write success*********** \n");
+    //int ret = write(fd, time_str, strlen(time_str));
+    //if(ret < 0) log_msg("************write failure*********** \n");
 
-    ret = write(fd, event_message, strlen(event_message));
-    if(ret < 0) log_msg("************write failure*********** \n");
-    else log_msg("************write success*********** \n");
+    //ret = write(fd, event_message, strlen(event_message));
+    //if(ret < 0) log_msg("************write failure*********** \n");
     
     // Close the FIFO
     close(fd);
-    log_msg("[LOG] Event logged\n");
+    //log_msg("[LOG] Event logged\n");
 }

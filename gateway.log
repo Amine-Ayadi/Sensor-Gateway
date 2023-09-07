@@ -1,1 +1,8 @@
-
+1 2023-08-27 21:54:15 : [1-CONNMGR] Server started (waiting for upcoming sockets)
+2023-08-27 21:54:15 : [3-STOREMGR]: Unable to connect to SQL database
+2023-08-27 21:54:15 : [2-DATAMGR] Sensor map is i2 nserted.
+1 2023-08-27 21:54:21 : [1-CONNMGR] Server shutting down (timeout)
+2 2023-08-27 21:54:21 : [2-DATAMGR] Shutting down!!!
+1 2023-08-27 21:54:21 : [3-STOREMGR]: Disconnected from database.
+1 2023-08-27 21:54:26 : Sending SIGUSR1 signal to child process
+2 2023-08-27 21:54:26 : send_kill_child

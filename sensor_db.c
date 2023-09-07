@@ -68,11 +68,10 @@ DBCONN *init_connection(char clear_up_flag){
         char query[264];
         sqlite3_open(TO_STRING(DB_NAME), &db);
         //sqlite3_free(db);
-        sprintf(query, "DROP TABLE IF EXISTS %s AND CREATE TABLE IF NOT EXISTS %s(id INTEGER PRIMARY KEY AUTOINCREMENT, sensor_id INT, sensor_value DECIMAL(4,2), timestamp VARCHAR(60));", TO_STRING(TABLE_NAME), TO_STRING(TABLE_NAME));        
-        //int ret = sqlite3_exec(db, query, log_callback, NULL, &err);
-        int ret = 0;
+        sprintf(query, "DROP TABLE IF EXISTS %s;CREATE TABLE IF NOT EXISTS %s(id INTEGER PRIMARY KEY AUTOINCREMENT, sensor_id INT, sensor_value DECIMAL(4,2), timestamp VARCHAR(60));", TO_STRING(TABLE_NAME), TO_STRING(TABLE_NAME));        
+        int ret = sqlite3_exec(db, query, f, NULL, &err);
+        //int ret = 0;
         if(ret != SQLITE_OK){
-            printf("[ERR]: mché inayek lenna \n");
             return NULL;
         }       
     }

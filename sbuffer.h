@@ -17,8 +17,8 @@
 typedef struct sbuffer_node {
     struct sbuffer_node *next;  /**< a pointer to the next node*/
     sensor_data_t data;         /**< a structure containing the data */
-    int managed;
-    int stored;
+    //int deleted;
+    int consumed;
 } sbuffer_node_t;
 
 /**

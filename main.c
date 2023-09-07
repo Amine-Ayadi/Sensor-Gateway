@@ -7,62 +7,67 @@
 #include <signal.h>
 #include <errno.h>
 
+static int CHILD_PROCESS_SHOULD_EXIT= 0;
 
-sem_t *log_sem;
+/*void signal_handler(int sig) {
+    if (sig == SIGUSR1) {
+        //printf("Sent SIGUSR1 Signal\n");
+        CHILD_PROCESS_SHOULD_EXIT = 1;
+    }
+    signal(sig, signal_handler);
+}*/
+
 
 void *start_storemgr(void *arg)
 {
     stormgr_args *args = ((stormgr_args *)arg);
     DBCONN *conn = (DBCONN *)args->conn;
     sbuffer_t *buffer = args->buffer;
-    if (!conn)
+    if (!conn) {
         log_msg("[3 - STOREMGR THREAD] Error: not connected");
-    else
-        log_msg("[3 - STOREMGR THREAD] Connected");
+        char message[100];
+        sprintf(message, "[3-STOREMGR]: Connected to SQL database.\n");
+        log_event(message); 
+    }
+    else {
+        log_msg("[3 - STOREMGR THREAD] CONNECTED");
+        char message[100];
+        sprintf(message, "[3-STOREMGR]: Unable to connect to SQL database\n");
+        log_event(message);
+    }
 
     while (conn && !buffer->exit_flag)
     {
-        int ret = pthread_mutex_lock(&buffer->sbuffer_mutex);
-        if (ret != 0) { 
+        int ret = pthread_mutex_lock(&buffer->sbuffer_mutex);            
+        if (ret != 0)
             log_msg("[3 - STOREMGR THREAD] Error locking mutex: %s", strerror(ret)); // Error handling
-        } else log_msg("[3 - STOREMGR THREAD] LOCKED HERE");
-
-        fprintf(stderr, "[3 - STOREMGR THREAD] STARTED");
-        while (!buffer->head)
+        else log_msg("[3 - STOREMGR THREAD] LOCKING..........");
+        
+       while (!buffer->head)
         {
-            log_msg("[3 - STOREMGR THREAD] WAITING: ALLOW WRITING");
             log_msg("[3 - STOREMGR THREAD] Thread[%d] %lu waiting on condition variable", 3, pthread_self());
             pthread_cond_wait(&buffer->buffer_has_data2, &buffer->sbuffer_mutex);
+            if (buffer->exit_flag) break;
         }
-        /****************** STORE DATA IN DB *****************/
-        log_msg("[3 - STOREMGR THREAD] Thread %lu finished waiting", pthread_self());
-        log_msg("[3 - STOREMGR THREAD] SIZE OF BUFFER IS %d", buffer_size(buffer));
+        if (buffer->exit_flag) continue;
 
+        //sbuffer_node_t* node = buffer->head;
         sensor_data_t *data = sbuffer_get_first(buffer);
-
-        //TODO: [LOG] 
-        //run_child(buffer, conn, args->pipe, 0);
-        //while (data)
-        //{
-        log_msg("[3 - STOREMGR THREAD] Reading");
-        log_msg("[3 - STOREMGR THREAD] DATA RECEIVING: %.2f", data->value);
         int result = insert_sensor(conn, data->id, data->value, data->ts);
-        log_msg("[3 - STOREMGR THREAD] Data Inserted in DataBase");
         if (result != 0) perror("[3 - STOREMGR THREAD] Error inserting sensor data into database");
-
-        /****************** DELETE DATA FROM *****************/
-        log_msg("[3 - STOREMGR THREAD] About to remove");
-        sbuffer_remove(buffer, data);
-        log_msg("[3 - STOREMGR THREAD] Data Removed");
-
-        pthread_cond_signal(&buffer->buffer_no_data);
-        log_msg("[3 - STOREMGR THREAD] Signalling condition variable from thread %lu", pthread_self());
-        pthread_mutex_unlock(&buffer->sbuffer_mutex);
+        log_msg("[3 - STOREMGR THREAD] SENSOR ID %d: INSERTED VALUE: %.2f AT %ld", data->id, data->value, time(NULL));
+        char message[100];
+        sprintf(message, "[3-STOREMGR]: New table %s created\n", TO_STRING(TABLE_NAME));
+        log_event(message);
+        
+        sbuffer_remove(buffer, data); // delete data from buffer, makes it a circular buffer
+        pthread_mutex_unlock(&buffer->sbuffer_mutex); 
     }
-
-    // Disconnect from the database when we're done
     disconnect(conn);
-    fprintf(stderr, "[3 - STOREMGR THREAD] Disconnected");
+    log_msg("[3 - STOREMGR THREAD] Disconnected");
+    char message[100];
+    sprintf(message, "[3-STOREMGR]: Disconnected from database.\n");
+    log_event(message);
 
     return NULL;
 }
@@ -83,8 +88,10 @@ int main(int argc, char **argv)
     sbuffer_t *buffer;
     DBCONN *conn = init_connection(1);
 
+    //signal(SIGUSR1, signal_handler);
+
     // we try to rewind the pipe if it's blocked or broken 
-    signal(SIGPIPE,SIG_IGN);
+    //signal(SIGPIPE,SIG_IGN);
 
     pthread_t connmgrID;
     pthread_t datamgrID;
@@ -98,6 +105,7 @@ int main(int argc, char **argv)
     if (access(FIFO_NAME, F_OK) == -1)
     {
         // FIFO does not exist, create it
+        printf("Creating new fifo %s\n", FIFO_NAME);
         int result = mkfifo(FIFO_NAME, 0666);
         if (result < 0)
         {
@@ -107,9 +115,11 @@ int main(int argc, char **argv)
     }
 
     // PIPING:
-    pid_t my_pid, child_pid;
+    pid_t my_pid;
+    pid_t child_pid;
     my_pid = getpid();
     printf("Parent process (pid = %d) is started \n", my_pid);
+//#if 0
 
     child_pid = fork();
     // Check if the fork was successful
@@ -128,51 +138,66 @@ int main(int argc, char **argv)
     if (child_pid == 0)
     {
         // Open the FIFO for reading
-        sleep(1);
+        
+        //sleep(1);
         int fd = open(FIFO_NAME, O_RDONLY);
         if (fd < 0)
         {
             perror("Error opening FIFO for reading\n");
             exit(EXIT_FAILURE);
-        } else printf("File opened: child process\n");
+        } else log_msg("File opened: child process\n");
 
-        while(!buffer->exit_flag){
-        // while(1){
-            // Open the log file for writing
-            FILE *log_file = fopen("gateway.log", "a");
+        while(!CHILD_PROCESS_SHOULD_EXIT)
+        {
+
+            
+            FILE *log_file = fopen("gateway.log", "a+");
             if (log_file == NULL)
             {
                 perror("Error opening log file");
                 exit(EXIT_FAILURE);
-            } else fprintf(stderr, "fd no data : %d \n", fd);
+            } //else fprintf(stderr, "fd no data : %d \n", fd);
             
             // Read log events from the FIFO and write them to the log file
-            char buff[100];
+            char buff[200];
             int bytes_read;
             int event_count = 0;
             
             while ((bytes_read = read(fd, buff, sizeof(buff) - 1)) > 0)
             {
                 // Null-terminate the buffer
-                log_msg("odkhel \n");
                 buff[bytes_read] = '\0';
+                //log_msg("%s \n", buff);
                 fprintf(log_file, "%d %s", ++event_count, buff);
+
+                //log_event
+
+                char* res = strstr(buff, "send_kill_child"); 
+                if (res != NULL)                     // if successful then s now points at "hassasin"
+                {
+                    CHILD_PROCESS_SHOULD_EXIT = 1;
+                }
+
             }
             if(errno == EPIPE){
                 log_msg("PIPE ERROR\n");
             }
-            log_msg("odkhel \n");
             fclose(log_file);
-            close(fd);
+            //close(fd);
+            
         }
+        close(fd);
         exit(EXIT_SUCCESS);
     }
     /*   MAIN PROCESS - 3 threads  */
     else if (my_pid > 0)
     {
-        printf("Parent process (pid = %d) has created child process (pid = %d)...\n", my_pid, child_pid);
+
+        //return 0;
+//#endif
+        //printf("Parent process (pid = %d) has created child process (pid = %d)...\n", my_pid, child_pid);
         
-        log_sem = sem_open("log_sem", O_CREAT, 0644, 1);
+        //log_sem = sem_open("log_sem", O_CREAT, 0644, 1);
 
         if (argc < 2) {
             printf("Please provide a port for the server as a command-line argument\n");
@@ -190,7 +215,6 @@ int main(int argc, char **argv)
         arg->conn = conn;
         argcon->buffer = buffer;
         argcon->port = port_input;
-
         if (pthread_create(&connmgrID, NULL, start_connmgr, argcon) != 0)
             perror("Failed to create thread connmgrID \n");
 
@@ -201,8 +225,11 @@ int main(int argc, char **argv)
             perror("Failed to create thread datamgrID \n");
 
         pthread_join(connmgrID, NULL);
+        printf("Thread 1 finished execution... \n");
         pthread_join(datamgrID, NULL);
+        printf("Thread 2 finished execution... \n");
         pthread_join(stormgrID, NULL);
+        printf("Thread 3 finished execution... \n");
 
         pthread_mutex_destroy(&buffer->sbuffer_mutex);
         pthread_mutex_destroy(&buffer->fifo_mutex);
@@ -215,19 +242,26 @@ int main(int argc, char **argv)
         free(argcon);
         
         // wait on termination of child process
-        printf("STUCK main\n");
+       // log_msg("STUCK main\n");
+
+        char message[100];
+        sprintf(message, "Sending SIGUSR1 signal to child process\n");
+        log_event(message);
+
+        log_msg("Parent process (pid = %d) is terminating ...\n", my_pid);
+        
+        //kill(0, SIGUSR1);
+
+        log_event("send_kill_child");
+
+        // wait for child to die
         waitpid(child_pid, NULL, 0);
         
-        kill(child_pid, SIGKILL);
-        printf("Parent process (pid = %d) is terminating ...\n", my_pid);
+        //kill(child_pid, SIGKILL);
     }
-    else
-    {
-        // Error creating the log process
-        perror("Error creating log process");
-        exit(EXIT_FAILURE);
-    }
-    printf("Gateway worked.... AYA SAYEB ZEBI\n");
+
+
+    log_msg("Exit success\n");
     return 0;
 }
 

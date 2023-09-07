@@ -27,13 +27,13 @@ client_run: client
 	./sensor_node $(ID) 15 1 0.0.0.0 5678
 
 client_run1: client
-	./sensor_node $(ID) 21 2 0.0.0.0 5678	
+	./sensor_node $(ID) 21 1 0.0.0.0 5678	
 
 client_run2: client
-	./sensor_node $(ID) 37 3 0.0.0.0 5678
+	./sensor_node $(ID) 37 1 0.0.0.0 5678
 
-client_run1: client
-	./sensor_node $(ID) 21 2 0.0.0.0 5678	
+client_run3: client
+	./sensor_node $(ID) 22 1 0.0.0.0 5678	
 
 datamgr: tcplib dplist
 	gcc -D SET_MIN_TEMP=14 -D SET_MAX_TEMP=28 -c -g -Wall -std=c11 -Werror datamgr.c -o datamgr.o && gcc -o datamgr datamgr.o -lm -L./lib -Wl,-rpath=./lib -lsock -llist -lcheck 
@@ -96,6 +96,7 @@ run_all: all
 	./main_parent 5678 & ./main_child 5678
 
 
-
+nik:
+	ps -x | grep main_parent | awk {'print $1'} | xargs kill -9
 separate: gw_new
 	./main_parent 5678 & ./main_child 5678

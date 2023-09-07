@@ -69,8 +69,8 @@ int main(int argc, char *argv[]) {
     int server_port;
     char server_ip[] = "000.000.000.000";
     tcpsock_t *client;
-    int i, bytes, sleep_time;
-
+    int i, sleep_time;
+    //int bytes;
     LOG_OPEN();
 
     if (argc != 5) {
@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
         time(&data.ts);
         // send data to server in this order (!!): <sensor_id><temperature><timestamp>
         // remark: don't send as a struct!
-        bytes = sizeof(data.id);
+        int bytes = sizeof(data.id);
         if (tcp_send(client, (void *) &data.id, &bytes) != TCP_NO_ERROR) exit(EXIT_FAILURE);
         bytes = sizeof(data.value);
         if (tcp_send(client, (void *) &data.value, &bytes) != TCP_NO_ERROR) exit(EXIT_FAILURE);

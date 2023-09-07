@@ -231,6 +231,46 @@ void dpl_print(dplist_t *list) {
     }
 }
 
+#if 0
+dplist_t* dpl_remove_at_index( dplist_t * list, int index, bool free_element) {
+    dplist_node_t* head = list->head;
+    dplist_node_t* temp = head;
+
+    if (index == 1) {
+        //printf("Treating index = 1\n");
+        head = temp->next;
+        (temp->next)->prev = head;
+        //free(temp);
+        return list;
+    }
+
+    if (index == 0) {
+        head = temp->next;
+        (temp->next)->prev = NULL;
+        //free(temp);
+        return list;    
+
+    }
+
+    for (int i = 0; i < index - 1; i++) {
+        //printf("Treating index = %d\n", i);
+        temp = temp->next;
+    }
+
+    if (temp->next != NULL) {
+        printf("Treating index = %d\n", 17);
+        (temp->next)->prev = temp->prev;
+        (temp->prev)->next = temp->next;
+    } else {
+        printf("Treating index = 87\n");
+        (temp->prev)->next = NULL;
+    }
+
+    //free(temp);
+    return list;
+}
+#endif
+
 dplist_t * dpl_remove_at_index( dplist_t * list, int index, bool free_element)
 {
 	dplist_node_t *ref_at_index; //, *list_node;
@@ -454,39 +494,3 @@ void * dpl_get_element_at_reference( dplist_t * list, dplist_node_t * reference 
 		}
 	} return NULL;
 }
-
-// int main() {
-//     dplist_t *list = dpl_create(
-//         element_copy_string,
-//         element_free_string,
-//         element_compare_string);
-
-//     char myStr[20] = "aaaa\n";
-//     char myStr2[20] = "zzzz\n";
-//     char myStr3[20] = "yyyy\n";
-
-//     dpl_insert_at_index(list, myStr, 1, true);
-//     dpl_insert_at_index(list, myStr2, 1, true);
-//     dpl_insert_at_index(list, myStr3, 2, true); 
-
-//     dpl_print(list);
-//     printf("1-----------------------\n");
-//     dpl_remove_at_index(list, 1, true);
-//     dpl_print(list);
-// // //     int index = dpl_size(list);
-// //     //printf("SIZE OF LIST IS: %d \n", index);
-//     printf("2-------------------------\n");
-// //     dpl_remove_at_index(list, 99, true);
-// //     dpl_print(list);
-// //     printf("3-------------------------\n");
-// //     dpl_remove_at_index(list, -1, false);
-// //     dpl_print(list);
-// //     printf("4-------------------------\n");
-// //     dpl_remove_at_index(list, 3, false);
-// //     dpl_print(list);
-// //     printf("5-----------------------\n");
-// //     dpl_remove_at_index(list, 0, true);
-// //     dpl_print(list);
-// //     printf("6-----------------------\n");
-//     return 0;
-// }

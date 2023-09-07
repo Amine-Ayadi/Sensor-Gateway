@@ -93,31 +93,50 @@ void* datamgr_parse_sensor_files(void* ptr)
     fclose(args->file);
     /****************** [LOG PROCESS] *****************/
     char message[100];
-    // log_event()
+    sprintf(message, "[2-DATAMGR] Sensor map is inserted.\n");
+    log_event(message);
     /****************** TIME AND TEMP INTO DPLIST *****************/
     int j = 0;
+    
     while(!buffer->exit_flag)
     {
-        sbuffer_node_t* node = buffer->head;
-        if (!node) {
-            //log_msg("[2 - DATAMGR THREAD] Waiting: head of buffer is null");
-            //continue;
-        }
-        // log_msg("[DATAMGR]TRYING TO LOCK... %d  \n", pthread_mutex_trylock(&buffer->sbuffer_mutex));
-        // int ret = pthread_mutex_lock(&buffer->sbuffer_mutex);
-        // log_msg("Error locking mutex: %s\n", strerror(ret)); 
-        
+        int ret = pthread_mutex_lock(&buffer->sbuffer_mutex);
         while(!buffer->head){
             log_msg("[2 - DATAMGR THREAD] Thread[%d] %lu waiting on condition variable", 2, pthread_self());
             pthread_cond_wait(&buffer->buffer_has_data1, &buffer->sbuffer_mutex);
-        }
-        log_msg("[2 - DATAMGR THREAD] Thread %lu finished waiting", pthread_self());
-        // log_msg("[2 - DATAMGR THREAD] SIZE OF BUFFER IS %d", buffer_size(buffer));
+            //if (buffer->exit_flag) shouldExit = 1;
+            pthread_mutex_unlock(&buffer->sbuffer_mutex);
 
+            if (buffer->exit_flag) break;
+        }
+        
+        if (buffer->exit_flag) {
+            pthread_cond_signal(&buffer->buffer_has_data2);
+            continue;
+
+        }
+        
+        // log_msg("[2 - DATAMGR THREAD] WAITING ..... \n ");
+        // pthread_cond_wait(&buffer->buffer_has_data1, &buffer->sbuffer_mutex);                
+        // /log_msg("[2 - DATAMGR THREAD] FINISEHD WAITING ..... \n ");
+        sbuffer_node_t* node = buffer->head;
+        if (!node || node->consumed == 1) {
+            //log_msg("[2 - DATAMGR THREAD] Waiting: head of buffer is null");
+            pthread_mutex_unlock(&buffer->sbuffer_mutex);
+            
+            continue;
+        }  
+        
+        log_msg("[DATAMGR]TRYING TO LOCK... %d  \n", pthread_mutex_trylock(&buffer->sbuffer_mutex));
+        
+        //log_msg("Error locking mutex: %s\n", strerror(ret)); 
+        //log_msg("[2 - DATAMGR THREAD] mutex lock %d \n", ret);
+        
+        log_msg("[2 - DATAMGR THREAD] Thread %lu finished waiting", pthread_self());
         log_msg("[2 - DATAMGR THREAD] buffer received from sensor_id: %d ", buffer->head->data.id);
-        //int res = pthread_mutex_lock(&buffer->sbuffer_mutex);
-        //log_msg("[2 - DATAMGR THREAD] mutex lock %d \n", res);
+
         sensor_data_t* data = sbuffer_get_first(buffer); 
+        log_msg("[2 - DATAMGR THREAD] GOT DATA ..... \n");
         // -----------Find the sensor in the list---------------
         for (int i = 0; i < dpl_size(sensor_list); i++)
         {
@@ -130,9 +149,8 @@ void* datamgr_parse_sensor_files(void* ptr)
                 double deletedValue = sensor->temp[0];
                 log_msg("Room ID : %d ", sensor->room_id);
                 log_msg("Sensor ID : %hd ", sensor->sensor_id);
-                for (i = 0; i < RUN_AVG_LENGTH; i++) {
+                for (i = 0; i < RUN_AVG_LENGTH; i++) 
                     sensor->temp[i] = sensor->temp[i+1];  
-                }
                 sensor->temp[RUN_AVG_LENGTH-1] = data->value;
                 sensor->last_modified = data->ts;
                 time_t t = sensor->last_modified;
@@ -143,67 +161,58 @@ void* datamgr_parse_sensor_files(void* ptr)
                     log_msg("Last modified is at : %s ", time_str);
                 }
                 sensor->running_avg = sensor->running_avg - (deletedValue/RUN_AVG_LENGTH) + (sensor->temp[RUN_AVG_LENGTH-1]/RUN_AVG_LENGTH);
-                for(int i=0;i<RUN_AVG_LENGTH;i++)
-                    log_msg("\tValue_recoded : %.2f ", sensor->temp[i]);
+                
+                for(int i=0;i<RUN_AVG_LENGTH;i++){
+                    log_msg("\tValue_recoded (consumed: %d): %.2f ", node->consumed, sensor->temp[i]);   
+                }
+                node->consumed = 1;
+
                 log_msg("Running Average : %.2f ", sensor->running_avg); 
                 // -------------[LOG PROCESS]-------------------
-                char message[100];
-                sprintf(message, "[2 - DatamgrID]: In room %d, a new running average recorded for sensor %d", sensor->room_id, sensor->sensor_id);
-                //log_event(message);
+                char message[200];
+                sprintf(message, "[2-DATAMGR]: In room %d, a new running average recorded for sensor %d", sensor->room_id, sensor->sensor_id);
+                log_event(message);
                 // -------------[LOG PROCESS]-------------------
                 if(!sensor_list){
                     log_msg("NULL LIST");
                     return NULL;
                 }
                 dplist_node_t* tmp = sensor_list->head;
-                log_msg("[2 - DatamgrID]: BUFFER SIZE NOW IS %d\n", buffer_size(buffer));
+                log_msg("[2 - DATAMGR THREAD]: BUFFER SIZE NOW IS %d\n", buffer_size(buffer));
                 if (!tmp) {
                     log_msg("Head pointing to NULL");
                     return NULL;
-                }         
+                }      
+                /*TODO:***************** [LOG][GATEWAY MESSAGE] *****************/                
+                if (sensor->running_avg < SET_MIN_TEMP){
+                    char message[200];
+                    sprintf(message, "[2-DATAMGR] Temperature dropped in room %d. The average temperature recorded by sensor %d is %.2f\n", sensor->room_id, sensor->sensor_id, sensor->running_avg);
+                    log_msg("\n\t[2 - DATAMGR THREAD] Temperature dropped in room %hu. \n\tThe average temperature recorded by sensor %d is %.2f at %ld\n\n", sensor->room_id, sensor->sensor_id, sensor->running_avg, sensor->last_modified);
+                    log_event(message);
+                }   
+                else if (sensor->running_avg > SET_MAX_TEMP){
+                    log_msg("\n\t[2 - DATAMGR THREAD] Temperature increased in room %hu. \n\tThe average temperature recorded by sensor %d is %.2f at %ld\n\n", sensor->room_id, sensor->sensor_id, sensor->running_avg, sensor->last_modified);
+                    char message[200];
+                    sprintf(message, "[2-DATAMGR]: Temperature increased in room %d. The average temperature recorded by sensor %d is %.2f\n", sensor->room_id, sensor->sensor_id, sensor->running_avg);
+                    log_event(message);
+                }
             }            
             j++;
             if (j == RUN_AVG_LENGTH)
                 j = 0;    
         }
-
-        //sbuffer_remove(buffer, data);
-        pthread_cond_signal(&buffer->buffer_has_data2);
-        pthread_mutex_unlock(&buffer->sbuffer_mutex);
-        
-        fprintf(fp_data_log,
-                "<Room: %u>\t<Sensor: %u>\t<AvgTemp: %lf>\t\t<Time: %ld>\n",
-                sensor->room_id,
-                sensor->sensor_id,
-                sensor->running_avg,
-                sensor->last_modified);
-
-        /*TODO:***************** [LOG][GATEWAY MESSAGE] *****************/                
-        if (sensor->running_avg < SET_MIN_TEMP){
-            log_msg("\n\t[LOG][2 - DATAMGR THREAD] Temperature dropped in room %hu. \n\tThe average temperature recorded by sensor %d is %.2f at %ld\n\n", sensor->room_id, sensor->sensor_id, sensor->running_avg, sensor->last_modified);
-            char message[100];
-            sprintf(message, "Temperature dropped in room %d. \n\tThe average temperature recorded by sensor %d is %.2f\n\n", sensor->room_id, sensor->sensor_id, sensor->running_avg);
-            //log_event(message);
-        }   
-        else if (sensor->running_avg > SET_MAX_TEMP){
-            fprintf(stderr, "\n\t[2 - DATAMGR THREAD] Temperature increased in room %hu. \n\tThe average temperature recorded by sensor %d is %.2f at %ld\n\n", sensor->room_id, sensor->sensor_id, sensor->running_avg, sensor->last_modified);
-            char message[140];
-            sprintf(message, "\n\t[2 - DATAMGR THREAD] Temperature increased in room %d. \n\tThe average temperature recorded by sensor %d is %.2f\n\n", sensor->room_id, sensor->sensor_id, sensor->running_avg);
-            //log_event(message);
-        }
-        
-        // pthread_cond_signal(&buffer->buffer_has_data2);   
-        // ret = pthread_mutex_unlock(&buffer->sbuffer_mutex);
-        // if (ret != 0) { 
-        //     printf("Error locking mutex: %s\n", strerror(ret)); // Error handling
-        // } else log_msg("[2 - DATAMGR THREAD] UNLOCKED HERE \n");
-        
+        pthread_cond_signal(&buffer->buffer_has_data2);   
+        log_msg("[2 - DATAMGR THREAD] TRYING TO NOTIFY STOREMANAGER ###############\n");
+        ret = pthread_mutex_unlock(&buffer->sbuffer_mutex);
+        if (ret != 0) { 
+            printf("Error locking mutex: %s\n", strerror(ret)); // Error handling
+        } else log_msg("[2 - DATAMGR THREAD] UNLOCKED HERE \n");      
     }
     // -------------[LOG PROCESS]-------------------
-    sprintf(message, "\n\t[2 - DATAMGR THREAD] Shutting down!!!\n\n");
-    //log_event(message);
+    sprintf(message, "[2-DATAMGR] Shutting down!!!\n");
+    log_event(message);
 
-    pthread_exit(NULL);
+    //datamgr_free();
     fclose(fp_data_log);
     free(sensor_list);
     free(sensor);
@@ -217,12 +226,7 @@ void datamgr_free()
 }
 
 void sensor_print_updated(sbuffer_t* buffer, sensor_list_t *sensor_list, double value)
-{
-    // pthread_mutex_t print_mutex;
-    // pthread_mutex_init(&print_mutex, NULL);
-    
-
-    pthread_mutex_lock(&(buffer->sbuffer_mutex));
+{    
     if(!sensor_list){
         printf("NULL LIST \n");
         return;
@@ -257,8 +261,6 @@ void sensor_print_updated(sbuffer_t* buffer, sensor_list_t *sensor_list, double 
     }
     free(sensor);
     free(tmp);
-    pthread_mutex_unlock(&(buffer->sbuffer_mutex));
-    // pthread_mutex_destroy(&print_mutex);
 }
 
 uint16_t datamgr_get_room_id(sensor_list_t *sensor_list, sensor_id_t sensor_id)
